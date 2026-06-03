@@ -1,0 +1,36 @@
+[build-system]
+requires = [
+    "setuptools>=70.1",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "NeuralQuad"
+version = "0.1.0"
+description = "Neural cross field project"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-only"
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "timm",
+    "trimesh",
+    "pyquadwild @ git+https://github.com/akashskypatel/pyquadwild.git"
+]
+
+[project.scripts]
+neuralquad-extract-quad-mesh = "neuralquad.extract_quad_mesh:main"
+neuralquad-extract-quad-mesh-from-field = "neuralquad.extract_quad_mesh_from_field:main"
+neuralquad-extract-quad-mesh-from-saved-crossfields = "neuralquad.extract_quad_mesh_from_saved_crossfields:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = [
+    "neuralquad",
+    "neuralquad.*"
+]
