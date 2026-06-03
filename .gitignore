@@ -221,3 +221,4 @@ __marimo__/
 .agents/
 *.code-workspace
 **/build/
+.data/

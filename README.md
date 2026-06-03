@@ -1,6 +1,6 @@
 # NeuralQuad
 
-NeuralQuad provides a practical quad-remeshing workflow built around trained cross fields.
+NeuralQuad provides a practical quad-remeshing/re-topology workflow to generate cross field aligned quad mesh using NeurCross trained cross field data.
 
 At a high level, the pipeline is:
 
@@ -34,6 +34,12 @@ The root `NeuralQuad` package declares these runtime dependencies:
 - `timm`
 - `trimesh`
 - `pyquadwild @ git+https://github.com/akashskypatel/pyquadwild.git`
+
+The optional `directional` backend is not declared as a root pip dependency. Install it separately from the local checkout if you want to use `--backend directional`:
+
+```powershell
+python -m pip install .\third_party\Directional
+```
 
 ## Installation
 
@@ -93,6 +99,12 @@ neurcross-crossfield-to-rosy D:\path\to\save_crossField\mesh_iter_999.txt
 neuralquad-extract-quad-mesh D:\path\to\mesh.ply D:\path\to\field.rosy
 ```
 
+Use the Directional backend instead of `pyquadwild`:
+
+```powershell
+neuralquad-extract-quad-mesh --backend directional D:\path\to\mesh.ply D:\path\to\field.rosy
+```
+
 Equivalent module form:
 
 ```powershell
@@ -105,6 +117,12 @@ NeuralQuad can take a saved NeurCross cross-field `.txt` directly:
 
 ```powershell
 neuralquad-extract-quad-mesh D:\path\to\mesh.ply D:\path\to\save_crossField\mesh_iter_999.txt
+```
+
+Directional can also consume the NeurCross `.txt` directly:
+
+```powershell
+neuralquad-extract-quad-mesh --backend directional D:\path\to\mesh.ply D:\path\to\save_crossField\mesh_iter_999.txt
 ```
 
 When given a NeurCross `.txt` file, NeuralQuad will:
@@ -146,6 +164,8 @@ Depending on the input field type, extraction may produce:
 - generated `*_crossfield.txt` file
 - `pyquadwild_debug/` debug directory
 
+When using `--backend directional`, the extractor writes quads only. Any non-quad polygons produced by Directional are filtered out before OBJ export.
+
 ## Programmatic API
 
 The root Python package exposes:
@@ -157,6 +177,7 @@ The root Python package exposes:
 - a triangulated input mesh
 - a `.rosy` field file
 - a NeurCross cross-field `.txt` file
+- optional `--verbose` flag for detailed logging
 
 ```python
 python -m neuralquad.extract_quad_mesh mesh.ply field.rosy output.obj

@@ -6,6 +6,7 @@ import os
 import re
 from pathlib import Path
 
+
 def _safe_normalize(vectors):
     import numpy as np
 
@@ -91,6 +92,8 @@ def _write_obj(path, vertices, faces):
 
 
 def _write_crossfield_txt(path, alpha, beta):
+    import numpy as np
+
     cross_field = np.concatenate((alpha, beta), axis=-1)
     np.savetxt(path, cross_field)
     return path
@@ -107,6 +110,40 @@ def _load_crossfield_txt(crossfield_path):
     alpha = cross_field[:, 0:3]
     beta = cross_field[:, 3:6]
     return alpha, beta
+
+
+def _load_rosy(rosy_path):
+    import numpy as np
+
+    with Path(rosy_path).open("r", encoding="utf-8") as infile:
+        lines = [line.strip() for line in infile if line.strip()]
+
+    if len(lines) < 2:
+        raise ValueError(f"Invalid .rosy file: {rosy_path}")
+
+    try:
+        count = int(lines[0])
+        symmetry = int(lines[1])
+    except ValueError as exc:
+        raise ValueError(f"Invalid .rosy header in {rosy_path}") from exc
+
+    if symmetry != 4:
+        raise ValueError(f"Only 4-RoSy .rosy files are supported, got N={symmetry} in {rosy_path}")
+
+    vectors = []
+    for line_number, line in enumerate(lines[2:], start=3):
+        parts = line.split()
+        if len(parts) < 3:
+            raise ValueError(f"Line {line_number} in {rosy_path} has fewer than 3 values.")
+        try:
+            vectors.append([float(parts[0]), float(parts[1]), float(parts[2])])
+        except ValueError as exc:
+            raise ValueError(f"Line {line_number} in {rosy_path} contains non-numeric data.") from exc
+
+    primary = np.asarray(vectors, dtype=np.float64)
+    if primary.shape[0] != count:
+        raise ValueError(f".rosy row count mismatch in {rosy_path}: header={count}, rows={primary.shape[0]}")
+    return _safe_normalize(primary)
 
 
 def _convert_crossfield_to_rosy(input_path: Path, output_path: Path | None = None) -> Path:
@@ -190,7 +227,12 @@ def _extract_quad_mesh_from_rosy(mesh_path, rosy_path, output_path):
     }
 
 
-def extract_quad_mesh_from_field(mesh_path, alpha, beta, output_path):
+def extract_quad_mesh_from_field(
+    mesh_path,
+    alpha,
+    beta,
+    output_path,
+):
     import numpy as np
 
     mesh = _load_triangle_mesh(mesh_path)
@@ -212,7 +254,11 @@ def extract_quad_mesh_from_field(mesh_path, alpha, beta, output_path):
     return result
 
 
-def extract_quad_mesh(mesh_path: Path, field_path: Path, output_path: Path | None = None) -> Path:
+def extract_quad_mesh(
+    mesh_path: Path,
+    field_path: Path,
+    output_path: Path | None = None,
+) -> Path:
     mesh_path = Path(mesh_path)
     field_path = Path(field_path)
     output_path = _resolve_output_path(mesh_path, field_path, output_path)
@@ -226,7 +272,12 @@ def extract_quad_mesh(mesh_path: Path, field_path: Path, output_path: Path | Non
         _extract_quad_mesh_from_rosy(str(mesh_path), str(field_path), str(output_path))
     elif field_path.suffix.lower() == ".txt":
         alpha, beta = _load_crossfield_txt(field_path)
-        extract_quad_mesh_from_field(str(mesh_path), alpha, beta, str(output_path))
+        extract_quad_mesh_from_field(
+            str(mesh_path),
+            alpha,
+            beta,
+            str(output_path),
+        )
     else:
         raise ValueError(
             f"Field file extension {field_path.suffix!r} is not supported. Provide a .rosy or .txt file."
@@ -234,9 +285,18 @@ def extract_quad_mesh(mesh_path: Path, field_path: Path, output_path: Path | Non
     return output_path
 
 
-def extract_quad_mesh_from_saved_crossfields(mesh_path, crossfield_paths, output_path):
+def extract_quad_mesh_from_saved_crossfields(
+    mesh_path,
+    crossfield_paths,
+    output_path,
+):
     alpha, beta, latest_path = load_latest_crossfield_snapshot(crossfield_paths)
-    result = extract_quad_mesh_from_field(mesh_path, alpha, beta, output_path)
+    result = extract_quad_mesh_from_field(
+        mesh_path,
+        alpha,
+        beta,
+        output_path,
+    )
     result['source_crossfield_path'] = latest_path
     return result
 
@@ -257,12 +317,21 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional output OBJ path. Defaults to <mesh-stem>_<field-stem>_quad.obj.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable backend progress logging.",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    output_path = extract_quad_mesh(args.mesh_path, args.field_path, args.output_path)
+    output_path = extract_quad_mesh(
+        args.mesh_path,
+        args.field_path,
+        args.output_path,
+    )
     print(f"Wrote {output_path}")
 
 
