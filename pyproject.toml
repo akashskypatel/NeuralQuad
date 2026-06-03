@@ -23,8 +23,6 @@ dependencies = [
 
 [project.scripts]
 neuralquad-extract-quad-mesh = "neuralquad.extract_quad_mesh:main"
-neuralquad-extract-quad-mesh-from-field = "neuralquad.extract_quad_mesh_from_field:main"
-neuralquad-extract-quad-mesh-from-saved-crossfields = "neuralquad.extract_quad_mesh_from_saved_crossfields:main"
 
 [tool.setuptools]
 include-package-data = true

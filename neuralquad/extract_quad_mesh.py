@@ -6,18 +6,17 @@ import os
 import re
 from pathlib import Path
 
-import numpy as np
-import pyquadwild
-import trimesh
-
-
 def _safe_normalize(vectors):
+    import numpy as np
+
     norms = np.linalg.norm(vectors, axis=-1, keepdims=True)
     norms = np.clip(norms, 1e-12, None)
     return vectors / norms
 
 
 def _load_triangle_mesh(mesh_path):
+    import trimesh
+
     mesh = trimesh.load_mesh(mesh_path, process=False)
     if isinstance(mesh, trimesh.Scene):
         mesh = trimesh.util.concatenate(tuple(
@@ -42,6 +41,8 @@ def _clean_face_indices(face):
 
 
 def _triangulate_faces(faces):
+    import numpy as np
+
     triangles = []
     for face in faces:
         cleaned = _clean_face_indices(face)
@@ -53,6 +54,8 @@ def _triangulate_faces(faces):
 
 
 def _mesh_topology_stats(vertices, faces):
+    import trimesh
+
     edge_counts = {}
     normalized_faces = []
     for face in faces:
@@ -94,6 +97,8 @@ def _write_crossfield_txt(path, alpha, beta):
 
 
 def _load_crossfield_txt(crossfield_path):
+    import numpy as np
+
     cross_field = np.loadtxt(crossfield_path, dtype=np.float64)
     if cross_field.ndim == 1:
         cross_field = cross_field.reshape(1, -1)
@@ -151,6 +156,10 @@ def _resolve_output_path(mesh_path: Path, field_path: Path, output_path: Path | 
 
 
 def _extract_quad_mesh_from_rosy(mesh_path, rosy_path, output_path):
+    import numpy as np
+    import pyquadwild
+    import trimesh
+
     mesh = _load_triangle_mesh(mesh_path)
     vertices = np.asarray(mesh.vertices, dtype=np.float64)
     triangles = np.asarray(mesh.faces, dtype=np.int64)
@@ -182,6 +191,8 @@ def _extract_quad_mesh_from_rosy(mesh_path, rosy_path, output_path):
 
 
 def extract_quad_mesh_from_field(mesh_path, alpha, beta, output_path):
+    import numpy as np
+
     mesh = _load_triangle_mesh(mesh_path)
     triangles = np.asarray(mesh.faces, dtype=np.int64)
     if alpha.shape != beta.shape or alpha.shape[1] != 3:
