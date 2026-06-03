@@ -1,9 +1,6 @@
 [submodule "third_party/NeurCross"]
 	path = third_party/NeurCross
 	url = git@github.com:akashskypatel/NeurCross.git
-[submodule "third_party/Directional"]
-	path = third_party/Directional
-	url = git@github.com:akashskypatel/Directional.git
 [submodule "third_party/pyquadwild"]
 	path = third_party/pyquadwild
 	url = git@github.com:akashskypatel/pyquadwild.git
