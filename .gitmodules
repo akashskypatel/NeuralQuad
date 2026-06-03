@@ -4,3 +4,6 @@
 [submodule "third_party/pyquadwild"]
 	path = third_party/pyquadwild
 	url = git@github.com:akashskypatel/pyquadwild.git
+[submodule "third_party/Directional"]
+	path = third_party/Directional
+	url = git@github.com:akashskypatel/Directional.git
