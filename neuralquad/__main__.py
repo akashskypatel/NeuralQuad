@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,17 +33,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     parser = build_parser()
-    args = parser.parse_args()
+    argv = sys.argv[1:]
+    if not argv or argv[0] in ("-h", "--help"):
+        parser.print_help()
+        return
 
-    if args.command == "extract-quad-mesh":
+    command, command_args = argv[0], argv[1:]
+
+    if command == "extract-quad-mesh":
         from .extract_quad_mesh import main as extract_main
-        import sys
 
-        sys.argv = ["neuralquad.extract_quad_mesh", *args.args]
+        sys.argv = ["neuralquad.extract_quad_mesh", *command_args]
         extract_main()
         return
 
-    parser.print_help()
+    parser.error(f"unknown command: {command}")
 
 
 if __name__ == "__main__":

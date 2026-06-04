@@ -144,18 +144,56 @@ def _write_rawfield(path, rawfield):
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.savetxt(path, np.asarray(rawfield, dtype=np.float64))
+    rawfield = np.asarray(rawfield, dtype=np.float64)
+    if rawfield.ndim != 2 or rawfield.shape[1] != 12:
+        raise ValueError(f"Expected rawfield array of shape (num_faces, 12), got {rawfield.shape!r}")
+    header = f"4 {rawfield.shape[0]}"
+    np.savetxt(path, rawfield, header=header, comments="")
     return path
 
 
 def _load_rawfield(rawfield_path):
+    import io
     import numpy as np
 
-    rawfield = np.loadtxt(rawfield_path, dtype=np.float64)
+    with Path(rawfield_path).open("r", encoding="utf-8") as infile:
+        lines = [line.strip() for line in infile if line.strip()]
+
+    if not lines:
+        raise ValueError(f"Empty raw-field file: {rawfield_path}")
+
+    first_parts = lines[0].split()
+    has_header = len(first_parts) == 2
+    rawfield_lines = lines
+    expected_degree = 4
+    expected_rows = None
+
+    if has_header:
+        try:
+            degree = int(first_parts[0])
+            tangent_spaces = int(first_parts[1])
+        except ValueError:
+            has_header = False
+        else:
+            if degree != expected_degree:
+                raise ValueError(
+                    f"Only 4-RoSy raw-field files are supported, got degree={degree} in {rawfield_path}"
+                )
+            expected_rows = tangent_spaces
+            rawfield_lines = lines[1:]
+
+    if not rawfield_lines:
+        raise ValueError(f"Raw-field file contains no vector rows: {rawfield_path}")
+
+    rawfield = np.loadtxt(io.StringIO("\n".join(rawfield_lines)), dtype=np.float64)
     if rawfield.ndim == 1:
         rawfield = rawfield.reshape(1, -1)
     if rawfield.shape[1] != 12:
-        raise ValueError(f'Expected exactly 12 columns in raw-field file: {rawfield_path}')
+        raise ValueError(f"Expected exactly 12 columns in raw-field file: {rawfield_path}")
+    if expected_rows is not None and rawfield.shape[0] != expected_rows:
+        raise ValueError(
+            f"Raw-field row count mismatch in {rawfield_path}: header={expected_rows}, rows={rawfield.shape[0]}"
+        )
     return rawfield
 
 
@@ -324,6 +362,31 @@ def _directional_faces_to_quads(degrees, faces):
     return quad_faces, dropped_non_quads
 
 
+def _directional_faces_to_polygons(degrees, faces):
+    import numpy as np
+
+    degrees = np.asarray(degrees, dtype=np.int32)
+    faces = np.asarray(faces)
+    polygon_faces = []
+    non_quad_count = 0
+    for face_index, degree in enumerate(degrees):
+        degree = int(degree)
+        polygon_faces.append(faces[face_index, :degree].astype(int).tolist())
+        if degree != 4:
+            non_quad_count += 1
+    return polygon_faces, int(non_quad_count)
+
+
+def _log_directional_face_histogram(degrees, *, preserve_non_quad):
+    from collections import Counter
+    import numpy as np
+
+    histogram = Counter(int(value) for value in np.asarray(degrees, dtype=np.int32).reshape(-1))
+    parts = [f"{histogram[degree]}x{degree}-gon" for degree in sorted(histogram)]
+    mode = 'preserving polygons' if preserve_non_quad else 'quad-only export'
+    print(f"Directional face degrees ({mode}): {', '.join(parts)}")
+
+
 def _extract_quad_mesh_directional_from_rawfield(
     mesh_path,
     rawfield_path,
@@ -331,6 +394,7 @@ def _extract_quad_mesh_directional_from_rawfield(
     *,
     length_ratio=0.02,
     round_seams=False,
+    preserve_non_quad=True,
     verbose=False,
 ):
     import numpy as np
@@ -364,16 +428,25 @@ def _extract_quad_mesh_directional_from_rawfield(
     if not result.success:
         raise RuntimeError('Directional remeshing failed to produce a polygon mesh.')
 
-    quad_faces, dropped_non_quads = _directional_faces_to_quads(result.degrees, result.faces)
-    if not quad_faces:
-        raise RuntimeError('Directional remeshing produced no quad faces to export.')
+    if verbose:
+        _log_directional_face_histogram(result.degrees, preserve_non_quad=preserve_non_quad)
 
-    _write_obj(output_path, result.vertices, quad_faces)
-    stats = _mesh_topology_stats(result.vertices, quad_faces)
-    stats['dropped_non_quads'] = int(dropped_non_quads)
+    if preserve_non_quad:
+        exported_faces, non_quad_count = _directional_faces_to_polygons(result.degrees, result.faces)
+    else:
+        exported_faces, non_quad_count = _directional_faces_to_quads(result.degrees, result.faces)
+        if not exported_faces:
+            raise RuntimeError('Directional remeshing produced no quad faces to export.')
+
+    _write_obj(output_path, result.vertices, exported_faces)
+    stats = _mesh_topology_stats(result.vertices, exported_faces)
+    stats['non_quad_count'] = int(non_quad_count)
+    stats['preserved_non_quads'] = bool(preserve_non_quad)
+    if not preserve_non_quad:
+        stats['dropped_non_quads'] = int(non_quad_count)
     return {
         'quad_vertices': result.vertices,
-        'quad_faces': quad_faces,
+        'quad_faces': exported_faces,
         'output_path': output_path,
         'topology': stats,
         'extractor': 'directional',
@@ -390,6 +463,7 @@ def _extract_quad_mesh_directional_from_field(
     length_ratio=0.02,
     round_seams=False,
     rawfield_path=None,
+    preserve_non_quad=True,
     verbose=False,
 ):
     import numpy as np
@@ -427,16 +501,25 @@ def _extract_quad_mesh_directional_from_field(
     if not result.success:
         raise RuntimeError('Directional remeshing failed to produce a polygon mesh.')
 
-    quad_faces, dropped_non_quads = _directional_faces_to_quads(result.degrees, result.faces)
-    if not quad_faces:
-        raise RuntimeError('Directional remeshing produced no quad faces to export.')
+    if verbose:
+        _log_directional_face_histogram(result.degrees, preserve_non_quad=preserve_non_quad)
 
-    _write_obj(output_path, result.vertices, quad_faces)
-    stats = _mesh_topology_stats(result.vertices, quad_faces)
-    stats['dropped_non_quads'] = int(dropped_non_quads)
+    if preserve_non_quad:
+        exported_faces, non_quad_count = _directional_faces_to_polygons(result.degrees, result.faces)
+    else:
+        exported_faces, non_quad_count = _directional_faces_to_quads(result.degrees, result.faces)
+        if not exported_faces:
+            raise RuntimeError('Directional remeshing produced no quad faces to export.')
+
+    _write_obj(output_path, result.vertices, exported_faces)
+    stats = _mesh_topology_stats(result.vertices, exported_faces)
+    stats['non_quad_count'] = int(non_quad_count)
+    stats['preserved_non_quads'] = bool(preserve_non_quad)
+    if not preserve_non_quad:
+        stats['dropped_non_quads'] = int(non_quad_count)
     return {
         'quad_vertices': result.vertices,
-        'quad_faces': quad_faces,
+        'quad_faces': exported_faces,
         'output_path': output_path,
         'topology': stats,
         'extractor': 'directional',
@@ -452,6 +535,7 @@ def _extract_quad_mesh_directional_from_rosy(
     length_ratio=0.02,
     round_seams=False,
     rawfield_path=None,
+    preserve_non_quad=True,
     verbose=False,
 ):
     import numpy as np
@@ -486,16 +570,25 @@ def _extract_quad_mesh_directional_from_rosy(
     if not result.success:
         raise RuntimeError('Directional remeshing failed to produce a polygon mesh.')
 
-    quad_faces, dropped_non_quads = _directional_faces_to_quads(result.degrees, result.faces)
-    if not quad_faces:
-        raise RuntimeError('Directional remeshing produced no quad faces to export.')
+    if verbose:
+        _log_directional_face_histogram(result.degrees, preserve_non_quad=preserve_non_quad)
 
-    _write_obj(output_path, result.vertices, quad_faces)
-    stats = _mesh_topology_stats(result.vertices, quad_faces)
-    stats['dropped_non_quads'] = int(dropped_non_quads)
+    if preserve_non_quad:
+        exported_faces, non_quad_count = _directional_faces_to_polygons(result.degrees, result.faces)
+    else:
+        exported_faces, non_quad_count = _directional_faces_to_quads(result.degrees, result.faces)
+        if not exported_faces:
+            raise RuntimeError('Directional remeshing produced no quad faces to export.')
+
+    _write_obj(output_path, result.vertices, exported_faces)
+    stats = _mesh_topology_stats(result.vertices, exported_faces)
+    stats['non_quad_count'] = int(non_quad_count)
+    stats['preserved_non_quads'] = bool(preserve_non_quad)
+    if not preserve_non_quad:
+        stats['dropped_non_quads'] = int(non_quad_count)
     return {
         'quad_vertices': result.vertices,
-        'quad_faces': quad_faces,
+        'quad_faces': exported_faces,
         'rosy_path': str(rosy_path),
         'output_path': output_path,
         'topology': stats,
@@ -514,6 +607,7 @@ def extract_quad_mesh_from_field(
     target_quad_count=None,
     length_ratio=0.02,
     round_seams=False,
+    preserve_non_quad=True,
     verbose=False,
 ):
     import numpy as np
@@ -557,6 +651,7 @@ def extract_quad_mesh_from_field(
             length_ratio=length_ratio,
             round_seams=round_seams,
             rawfield_path=rawfield_path,
+            preserve_non_quad=preserve_non_quad,
             verbose=verbose,
         )
         result['rosy_path'] = str(rosy_path)
@@ -576,6 +671,7 @@ def extract_quad_mesh(
     target_quad_count: int | None = None,
     length_ratio: float = 0.02,
     round_seams: bool = False,
+    preserve_non_quad: bool = True,
     verbose: bool = False,
 ) -> Path:
     mesh_path = Path(mesh_path)
@@ -608,6 +704,7 @@ def extract_quad_mesh(
                 length_ratio=length_ratio,
                 round_seams=round_seams,
                 rawfield_path=Path(os.path.splitext(os.path.abspath(output_path))[0] + '.rawfield'),
+                preserve_non_quad=preserve_non_quad,
                 verbose=verbose,
             )
         else:
@@ -623,6 +720,7 @@ def extract_quad_mesh(
             target_quad_count=target_quad_count,
             length_ratio=length_ratio,
             round_seams=round_seams,
+            preserve_non_quad=preserve_non_quad,
             verbose=verbose,
         )
     elif field_suffix in (".rawfield", ".rawfiled"):
@@ -636,6 +734,7 @@ def extract_quad_mesh(
             str(output_path),
             length_ratio=length_ratio,
             round_seams=round_seams,
+            preserve_non_quad=preserve_non_quad,
             verbose=verbose,
         )
     else:
@@ -654,6 +753,7 @@ def extract_quad_mesh_from_saved_crossfields(
     target_quad_count=None,
     length_ratio=0.02,
     round_seams=False,
+    preserve_non_quad=True,
     verbose=False,
 ):
     alpha, beta, latest_path = load_latest_crossfield_snapshot(crossfield_paths)
@@ -666,6 +766,7 @@ def extract_quad_mesh_from_saved_crossfields(
         target_quad_count=target_quad_count,
         length_ratio=length_ratio,
         round_seams=round_seams,
+        preserve_non_quad=preserve_non_quad,
         verbose=verbose,
     )
     result['source_crossfield_path'] = latest_path
@@ -712,6 +813,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directional backend option for seam rounding.",
     )
     parser.add_argument(
+        "--preserve-non-quad",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Preserve non-quad polygons produced by the Directional backend. Disable with --no-preserve-non-quad to trim to quads only.",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable backend progress logging.",
@@ -729,6 +836,7 @@ def main() -> None:
         target_quad_count=args.target_quad_count,
         length_ratio=args.length_ratio,
         round_seams=args.round_seams,
+        preserve_non_quad=args.preserve_non_quad,
         verbose=args.verbose,
     )
     print(f"Wrote {output_path}")
