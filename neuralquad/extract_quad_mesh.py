@@ -110,6 +110,55 @@ def _write_crossfield_txt(path, alpha, beta):
     return path
 
 
+def _project_tangent_vectors(vectors, normals):
+    import numpy as np
+
+    tangent = vectors - np.sum(vectors * normals, axis=1, keepdims=True) * normals
+    return _safe_normalize(tangent)
+
+
+def _make_rawfield(vertices, triangles, alpha, beta):
+    import numpy as np
+    import trimesh
+
+    mesh = trimesh.Trimesh(vertices=vertices, faces=triangles, process=False)
+    normals = np.asarray(mesh.face_normals, dtype=np.float64)
+    primary = _project_tangent_vectors(np.asarray(alpha, dtype=np.float64), normals)
+    secondary = _project_tangent_vectors(np.asarray(beta, dtype=np.float64), normals)
+    return np.concatenate((primary, secondary, -primary, -secondary), axis=1)
+
+
+def _make_rawfield_from_rosy(vertices, triangles, primary):
+    import numpy as np
+    import trimesh
+
+    mesh = trimesh.Trimesh(vertices=vertices, faces=triangles, process=False)
+    normals = np.asarray(mesh.face_normals, dtype=np.float64)
+    primary = _project_tangent_vectors(np.asarray(primary, dtype=np.float64), normals)
+    secondary = _safe_normalize(np.cross(normals, primary))
+    return np.concatenate((primary, secondary, -primary, -secondary), axis=1)
+
+
+def _write_rawfield(path, rawfield):
+    import numpy as np
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savetxt(path, np.asarray(rawfield, dtype=np.float64))
+    return path
+
+
+def _load_rawfield(rawfield_path):
+    import numpy as np
+
+    rawfield = np.loadtxt(rawfield_path, dtype=np.float64)
+    if rawfield.ndim == 1:
+        rawfield = rawfield.reshape(1, -1)
+    if rawfield.shape[1] != 12:
+        raise ValueError(f'Expected exactly 12 columns in raw-field file: {rawfield_path}')
+    return rawfield
+
+
 def _load_crossfield_txt(crossfield_path):
     import numpy as np
 
@@ -275,6 +324,63 @@ def _directional_faces_to_quads(degrees, faces):
     return quad_faces, dropped_non_quads
 
 
+def _extract_quad_mesh_directional_from_rawfield(
+    mesh_path,
+    rawfield_path,
+    output_path,
+    *,
+    length_ratio=0.02,
+    round_seams=False,
+    verbose=False,
+):
+    import numpy as np
+
+    directional = _load_directional()
+    mesh = _load_triangle_mesh(mesh_path)
+    vertices = np.asarray(mesh.vertices, dtype=np.float64)
+    triangles = np.asarray(mesh.faces, dtype=np.int32)
+    rawfield = _load_rawfield(rawfield_path)
+
+    if rawfield.shape[0] != triangles.shape[0]:
+        raise ValueError('Raw-field face count must match the mesh face count.')
+
+    options = directional.RemeshOptions()
+    options.length_ratio = float(length_ratio)
+    options.integral_seamless = True
+    options.round_seams = bool(round_seams)
+    options.feature_align = False
+    options.verbose = bool(verbose)
+    options.normalize_directions = False
+
+    if verbose:
+        print(f"Directional raw field input: {rawfield_path}")
+
+    result = directional.remesh_from_raw_cross_field(
+        vertices,
+        triangles,
+        rawfield,
+        options,
+    )
+    if not result.success:
+        raise RuntimeError('Directional remeshing failed to produce a polygon mesh.')
+
+    quad_faces, dropped_non_quads = _directional_faces_to_quads(result.degrees, result.faces)
+    if not quad_faces:
+        raise RuntimeError('Directional remeshing produced no quad faces to export.')
+
+    _write_obj(output_path, result.vertices, quad_faces)
+    stats = _mesh_topology_stats(result.vertices, quad_faces)
+    stats['dropped_non_quads'] = int(dropped_non_quads)
+    return {
+        'quad_vertices': result.vertices,
+        'quad_faces': quad_faces,
+        'output_path': output_path,
+        'topology': stats,
+        'extractor': 'directional',
+        'rawfield_path': str(rawfield_path),
+    }
+
+
 def _extract_quad_mesh_directional_from_field(
     mesh_path,
     alpha,
@@ -283,6 +389,7 @@ def _extract_quad_mesh_directional_from_field(
     *,
     length_ratio=0.02,
     round_seams=False,
+    rawfield_path=None,
     verbose=False,
 ):
     import numpy as np
@@ -296,6 +403,11 @@ def _extract_quad_mesh_directional_from_field(
         raise ValueError('Cross field face count must match the mesh face count.')
     if beta.shape != alpha.shape or alpha.shape[1] != 3:
         raise ValueError('alpha and beta must both have shape (num_faces, 3).')
+
+    rawfield_path = Path(rawfield_path) if rawfield_path is not None else Path(output_path).with_suffix(".rawfield")
+    rawfield_path = _write_rawfield(rawfield_path, _make_rawfield(vertices, triangles, alpha, beta))
+    if verbose:
+        print(f"Directional raw field debug data: {rawfield_path}")
 
     options = directional.RemeshOptions()
     options.length_ratio = float(length_ratio)
@@ -328,6 +440,7 @@ def _extract_quad_mesh_directional_from_field(
         'output_path': output_path,
         'topology': stats,
         'extractor': 'directional',
+        'rawfield_path': str(rawfield_path),
     }
 
 
@@ -338,6 +451,7 @@ def _extract_quad_mesh_directional_from_rosy(
     *,
     length_ratio=0.02,
     round_seams=False,
+    rawfield_path=None,
     verbose=False,
 ):
     import numpy as np
@@ -349,6 +463,11 @@ def _extract_quad_mesh_directional_from_rosy(
     primary = _load_rosy(rosy_path)
     if primary.shape[0] != triangles.shape[0]:
         raise ValueError('RoSy face count must match the mesh face count.')
+
+    rawfield_path = Path(rawfield_path) if rawfield_path is not None else Path(output_path).with_suffix(".rawfield")
+    rawfield_path = _write_rawfield(rawfield_path, _make_rawfield_from_rosy(vertices, triangles, primary))
+    if verbose:
+        print(f"Directional raw field debug data: {rawfield_path}")
 
     options = directional.RemeshOptions()
     options.length_ratio = float(length_ratio)
@@ -381,6 +500,7 @@ def _extract_quad_mesh_directional_from_rosy(
         'output_path': output_path,
         'topology': stats,
         'extractor': 'directional',
+        'rawfield_path': str(rawfield_path),
     }
 
 
@@ -412,6 +532,12 @@ def extract_quad_mesh_from_field(
     output_base = os.path.splitext(os.path.abspath(output_path))[0]
     crossfield_path = _write_crossfield_txt(output_base + '_crossfield.txt', alpha, beta)
     rosy_path = _convert_crossfield_to_rosy(Path(crossfield_path), Path(output_base + '.rosy'), alpha=alpha)
+    rawfield_path = _write_rawfield(
+        Path(output_base + '.rawfield'),
+        _make_rawfield(np.asarray(mesh.vertices, dtype=np.float64), triangles.astype(np.int32), alpha, beta),
+    )
+    if verbose and backend != 'directional':
+        print(f"Directional raw field debug data: {rawfield_path}")
     if backend == 'pyquadwild':
         result = _extract_quad_mesh_from_rosy(
             mesh_path,
@@ -430,12 +556,14 @@ def extract_quad_mesh_from_field(
             output_path,
             length_ratio=length_ratio,
             round_seams=round_seams,
+            rawfield_path=rawfield_path,
             verbose=verbose,
         )
         result['rosy_path'] = str(rosy_path)
     else:
         raise ValueError(f"Unsupported backend {backend!r}.")
     result['crossfield_path'] = crossfield_path
+    result['rawfield_path'] = str(rawfield_path)
     return result
 
 
@@ -444,7 +572,7 @@ def extract_quad_mesh(
     field_path: Path,
     output_path: Path | None = None,
     *,
-    backend: str = 'pyquadwild',
+    backend: str = 'auto',
     target_quad_count: int | None = None,
     length_ratio: float = 0.02,
     round_seams: bool = False,
@@ -459,8 +587,10 @@ def extract_quad_mesh(
     if not field_path.is_file():
         raise FileNotFoundError(f"Input field file was not found: {field_path}")
 
-    if field_path.suffix.lower() == ".rosy":
-        if backend == 'pyquadwild':
+    field_suffix = field_path.suffix.lower()
+
+    if field_suffix == ".rosy":
+        if backend in ('auto', 'pyquadwild'):
             _extract_quad_mesh_from_rosy(
                 str(mesh_path),
                 str(field_path),
@@ -477,26 +607,40 @@ def extract_quad_mesh(
                 str(output_path),
                 length_ratio=length_ratio,
                 round_seams=round_seams,
+                rawfield_path=Path(os.path.splitext(os.path.abspath(output_path))[0] + '.rawfield'),
                 verbose=verbose,
             )
         else:
             raise ValueError(f"Unsupported backend {backend!r}.")
-    elif field_path.suffix.lower() == ".txt":
+    elif field_suffix == ".txt":
         alpha, beta = _load_crossfield_txt(field_path)
         extract_quad_mesh_from_field(
             str(mesh_path),
             alpha,
             beta,
             str(output_path),
-            backend=backend,
+            backend='pyquadwild' if backend == 'auto' else backend,
             target_quad_count=target_quad_count,
+            length_ratio=length_ratio,
+            round_seams=round_seams,
+            verbose=verbose,
+        )
+    elif field_suffix in (".rawfield", ".rawfiled"):
+        if backend == 'pyquadwild':
+            raise ValueError('Raw-field input is only supported by the Directional backend.')
+        if target_quad_count is not None:
+            raise ValueError('target_quad_count is only supported by the pyquadwild backend.')
+        _extract_quad_mesh_directional_from_rawfield(
+            str(mesh_path),
+            str(field_path),
+            str(output_path),
             length_ratio=length_ratio,
             round_seams=round_seams,
             verbose=verbose,
         )
     else:
         raise ValueError(
-            f"Field file extension {field_path.suffix!r} is not supported. Provide a .rosy or .txt file."
+            f"Field file extension {field_path.suffix!r} is not supported. Provide a .rosy, .txt, or .rawfield file."
         )
     return output_path
 
@@ -530,13 +674,13 @@ def extract_quad_mesh_from_saved_crossfields(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Extract a quad mesh from an input triangle mesh using a .rosy or cross-field (.txt) file."
+        description="Extract a quad mesh from an input triangle mesh using a .rosy, cross-field (.txt), or raw-field (.rawfield) file."
     )
     parser.add_argument("mesh_path", type=Path, help="Path to the input triangle mesh.")
     parser.add_argument(
         "field_path",
         type=Path,
-        help="Path to the orientation field. Use a .rosy file (QuadWild format) or a .txt cross-field file (NeurCross format).",
+        help="Path to the orientation field. Use .rosy, .txt cross-field, or Directional .rawfield input.",
     )
     parser.add_argument(
         "output_path",
@@ -546,9 +690,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--backend",
-        choices=("pyquadwild", "directional"),
-        default="pyquadwild",
-        help="Quad extraction backend to use.",
+        choices=("auto", "pyquadwild", "directional"),
+        default="auto",
+        help="Quad extraction backend to use. auto selects pyquadwild for .rosy/.txt and directional for .rawfield.",
     )
     parser.add_argument(
         "--target-quad-count",

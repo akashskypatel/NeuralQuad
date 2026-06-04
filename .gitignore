@@ -223,3 +223,6 @@ __marimo__/
 **/build/
 .data/
 .vscode/
+AGENTS.md
+CLAUDE.md
+.claude/

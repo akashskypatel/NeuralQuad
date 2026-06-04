@@ -125,13 +125,24 @@ Directional can also consume the NeurCross `.txt` directly:
 neuralquad-extract-quad-mesh --backend directional D:\path\to\mesh.ply D:\path\to\save_crossField\mesh_iter_999.txt
 ```
 
+### Extract a Quad Mesh From a Directional Raw Field
+
+NeuralQuad can also pass a 12-column Directional `.rawfield` file directly to the Directional backend:
+
+```powershell
+neuralquad-extract-quad-mesh D:\path\to\mesh.ply D:\path\to\field.rawfield
+# equivalent explicit backend form:
+neuralquad-extract-quad-mesh --backend directional D:\path\to\mesh.ply D:\path\to\field.rawfield
+```
+
 When given a NeurCross `.txt` file, NeuralQuad will:
 
 1. Read the saved cross field.
 2. Write a sidecar `*_crossfield.txt`.
-3. Convert that to `*.rosy`.
-4. Run `pyquadwild` with the generated `.rosy`.
-5. Write the final quad mesh as OBJ.
+3. Write a Directional-compatible `*.rawfield` debug file.
+4. Convert that to `*.rosy`.
+5. Run the selected backend.
+6. Write the final quad mesh as OBJ.
 
 ### Output Path Behavior
 
@@ -162,6 +173,7 @@ Depending on the input field type, extraction may produce:
 - final quad mesh OBJ
 - generated `*.rosy` file
 - generated `*_crossfield.txt` file
+- generated `*.rawfield` file containing 12-column Directional raw field data for debugging
 - `pyquadwild_debug/` debug directory
 
 When using `--backend directional`, the extractor writes quads only. Any non-quad polygons produced by Directional are filtered out before OBJ export.
