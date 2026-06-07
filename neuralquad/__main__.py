@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,15 +19,22 @@ def build_parser() -> argparse.ArgumentParser:
         "extract-quad-mesh",
         help="Extract a quad mesh from a triangle mesh and field input.",
     )
+    convert = subparsers.add_parser(
+        "convert",
+        help="Convert a mesh to a different format.",
+    )
     extract.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
+    convert.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
 
     parser.epilog = (
         "High-level functionality:\n"
         "  extract-quad-mesh  Generate a quad mesh from .txt, .rosy, or .rawfield input.\n\n"
+        "  convert  Convert a mesh to a different format.\n\n"
         "Examples:\n"
-        "  python -m neuralquad --help\n"
-        "  python -m neuralquad extract-quad-mesh --help\n"
-        "  python -m neuralquad extract-quad-mesh mesh.ply field.rosy output.obj"
+        "  `python -m neuralquad --help`\n"
+        "  `python -m neuralquad extract-quad-mesh --help`\n"
+        "  `python -m neuralquad extract-quad-mesh mesh.ply field.rosy output.obj`\n"
+        "  `python -m neuralquad convert input.obj stl`"
     )
     return parser
 
@@ -41,10 +49,17 @@ def main() -> None:
     command, command_args = argv[0], argv[1:]
 
     if command == "extract-quad-mesh":
-        from .extract_quad_mesh import main as extract_main
+        from neuralquad.extract_quad_mesh import extract_main
 
         sys.argv = ["neuralquad.extract_quad_mesh", *command_args]
         extract_main()
+        return
+
+    if command == "convert":
+        from neuralquad.extract_quad_mesh import convert_main
+
+        sys.argv = ["neuralquad.extract_quad_mesh", *command_args]
+        convert_main()
         return
 
     parser.error(f"unknown command: {command}")

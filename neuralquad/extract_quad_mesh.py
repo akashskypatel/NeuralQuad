@@ -62,6 +62,10 @@ def _triangulate_faces(faces):
             continue
         for offset in range(1, len(cleaned) - 1):
             triangles.append([cleaned[0], cleaned[offset], cleaned[offset + 1]])
+
+    if not triangles:
+        return np.empty((0, 3), dtype=np.int64)
+
     return np.asarray(triangles, dtype=np.int64)
 
 
@@ -84,23 +88,53 @@ def _mesh_topology_stats(vertices, faces):
     nonmanifold_edges = sum(1 for count in edge_counts.values() if count > 2)
     tri_faces = _triangulate_faces(normalized_faces)
     tri_mesh = trimesh.Trimesh(vertices=vertices, faces=tri_faces, process=False)
+    if tri_faces.shape[0] == 0:
+        return {
+            "components": 0,
+            "boundary_edges": int(boundary_edges),
+            "nonmanifold_edges": int(nonmanifold_edges),
+            "is_watertight": False,
+        }
     return {
-        'components': len(tri_mesh.split(only_watertight=False)),
-        'boundary_edges': int(boundary_edges),
-        'nonmanifold_edges': int(nonmanifold_edges),
-        'is_watertight': bool(boundary_edges == 0 and nonmanifold_edges == 0 and tri_mesh.is_watertight),
+        "components": len(tri_mesh.split(only_watertight=False)),
+        "boundary_edges": int(boundary_edges),
+        "nonmanifold_edges": int(nonmanifold_edges),
+        "is_watertight": bool(
+            boundary_edges == 0 and nonmanifold_edges == 0 and tri_mesh.is_watertight
+        ),
     }
 
 
 def _write_obj(path, vertices, faces):
-    with open(path, 'w', encoding='utf-8') as handle:
-        handle.write('# NeuralQuad quad mesh extraction via pyquadwild\n')
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("# NeuralQuad quad mesh extraction via pyquadwild\n")
         for vertex in vertices:
-            handle.write(f'v {vertex[0]} {vertex[1]} {vertex[2]}\n')
+            handle.write(f"v {vertex[0]} {vertex[1]} {vertex[2]}\n")
         for face in faces:
             cleaned_face = _clean_face_indices(face)
-            handle.write('f {}\n'.format(' '.join(str(int(index) + 1) for index in cleaned_face)))
+            if len(cleaned_face) < 3:
+                continue
+            handle.write(
+                "f {}\n".format(
+                    " ".join(str(int(index) + 1) for index in cleaned_face)
+                )
+            )
 
+
+def convert_mesh(mesh, format):
+    from pathlib import Path
+    from trimesh import load_mesh
+
+    mesh = Path(mesh)
+    loaded_mesh = load_mesh(mesh)
+    output_path = mesh.with_suffix(f".{format}")
+
+    try:
+        loaded_mesh.export(output_path, file_type=format)
+        return output_path
+    except Exception as e:
+        raise RuntimeError(f"Error converting mesh to {format}: {e}") from e
+    
 
 def _write_crossfield_txt(path, alpha, beta):
     import numpy as np
@@ -472,11 +506,13 @@ def _extract_quad_mesh_directional_from_field(
     mesh = _load_triangle_mesh(mesh_path)
     vertices = np.asarray(mesh.vertices, dtype=np.float64)
     triangles = np.asarray(mesh.faces, dtype=np.int32)
+    alpha = np.asarray(alpha, dtype=np.float64)
+    beta = np.asarray(beta, dtype=np.float64)
 
     if alpha.shape[0] != triangles.shape[0]:
         raise ValueError('Cross field face count must match the mesh face count.')
-    if beta.shape != alpha.shape or alpha.shape[1] != 3:
-        raise ValueError('alpha and beta must both have shape (num_faces, 3).')
+    if alpha.ndim != 2 or beta.ndim != 2 or alpha.shape != beta.shape or alpha.shape[1] != 3:
+        raise ValueError("alpha and beta must both have shape (num_faces, 3).")
 
     rawfield_path = Path(rawfield_path) if rawfield_path is not None else Path(output_path).with_suffix(".rawfield")
     rawfield_path = _write_rawfield(rawfield_path, _make_rawfield(vertices, triangles, alpha, beta))
@@ -614,8 +650,11 @@ def extract_quad_mesh_from_field(
 
     mesh = _load_triangle_mesh(mesh_path)
     triangles = np.asarray(mesh.faces, dtype=np.int64)
-    if alpha.shape != beta.shape or alpha.shape[1] != 3:
-        raise ValueError('alpha and beta must both have shape (num_faces, 3).')
+    alpha = np.asarray(alpha, dtype=np.float64)
+    beta = np.asarray(beta, dtype=np.float64)
+
+    if alpha.ndim != 2 or beta.ndim != 2 or alpha.shape != beta.shape or alpha.shape[1] != 3:
+        raise ValueError("alpha and beta must both have shape (num_faces, 3).")
     if alpha.shape[0] != triangles.shape[0]:
         raise ValueError('Cross field face count must match the mesh face count.')
 
@@ -773,7 +812,7 @@ def extract_quad_mesh_from_saved_crossfields(
     return result
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_extract_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Extract a quad mesh from an input triangle mesh using a .rosy, cross-field (.txt), or raw-field (.rawfield) file."
     )
@@ -788,6 +827,11 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         type=Path,
         help="Optional output OBJ path. Defaults to <mesh-stem>_<field-stem>_quad.obj.",
+    )
+    parser.add_argument(
+        "--convert_to",
+        nargs=1,
+        help="Convert the resulting mesh to a different format. Usage: convert_to <output_format>. Supported formats: stl, off, ply, collada, json, dict, glb, dict64, msgpack"
     )
     parser.add_argument(
         "--backend",
@@ -825,9 +869,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     return parser
 
+def build_convert_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Convert a mesh to a different format."
+    )
+    parser.add_argument("input_path", type=Path, help="Path to the input mesh.")
+    parser.add_argument(
+        "format",
+        type=str,
+        help="Supported Output formats: stl, off, ply, collada, json, dict, glb, dict64, msgpack",
+    )
+    return parser
 
-def main() -> None:
-    args = build_parser().parse_args()
+
+def extract_main() -> None:
+    args = build_extract_parser().parse_args()
     output_path = extract_quad_mesh(
         args.mesh_path,
         args.field_path,
@@ -839,8 +895,13 @@ def main() -> None:
         preserve_non_quad=args.preserve_non_quad,
         verbose=args.verbose,
     )
-    print(f"Wrote {output_path}")
+    if args.convert_to:
+        convert_mesh(output_path, args.convert_to[0])
+        print(f"Converted {output_path} to {args.convert_to[0]}")
+    else:
+        print(f"Wrote {output_path}")
 
-
-if __name__ == "__main__":
-    main()
+def convert_main() -> None:
+    args = build_convert_parser().parse_args()
+    output_path = convert_mesh(args.input_path, args.format)
+    print(f"Converted {args.input_path} to {output_path}")
