@@ -764,7 +764,15 @@ def extract_quad_mesh(
         )
     elif field_suffix in (".rawfield", ".rawfiled"):
         if backend == 'pyquadwild':
-            raise ValueError('Raw-field input is only supported by the Directional backend.')
+            from neurcross import convert_rawfield_to_rosy
+            rosy_path = convert_rawfield_to_rosy(field_path, output_path.with_suffix('.rosy'))
+            _extract_quad_mesh_from_rosy(
+                str(mesh_path),
+                str(rosy_path),
+                str(output_path),
+                target_quad_count=target_quad_count,
+                verbose=verbose,
+            )
         if target_quad_count is not None:
             raise ValueError('target_quad_count is only supported by the pyquadwild backend.')
         _extract_quad_mesh_directional_from_rawfield(
@@ -831,7 +839,7 @@ def build_extract_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--convert_to",
         nargs=1,
-        help="Convert the resulting mesh to a different format. Usage: convert_to <output_format>. Supported formats: stl, off, ply, collada, json, dict, glb, dict64, msgpack"
+        help="Convert the resulting mesh to a different format. Usage: convert_to <output_format>. Supported formats: obj, stl, off, ply, collada, json, dict, glb, dict64, msgpack"
     )
     parser.add_argument(
         "--backend",
@@ -877,7 +885,7 @@ def build_convert_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "format",
         type=str,
-        help="Supported Output formats: stl, off, ply, collada, json, dict, glb, dict64, msgpack",
+        help="Supported Output formats: obj, stl, off, ply, collada, json, dict, glb, dict64, msgpack",
     )
     return parser
 

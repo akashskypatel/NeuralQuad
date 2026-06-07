@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.epilog = (
         "High-level functionality:\n"
         "  extract-quad-mesh  Generate a quad mesh from .txt, .rosy, or .rawfield input.\n\n"
+        "  extract  Alias for extract-quad-mesh.\n\n"
         "  convert  Convert a mesh to a different format.\n\n"
         "Examples:\n"
         "  `python -m neuralquad --help`\n"
@@ -48,7 +49,7 @@ def main() -> None:
 
     command, command_args = argv[0], argv[1:]
 
-    if command == "extract-quad-mesh":
+    if command == "extract-quad-mesh" or command == "extract":
         from neuralquad.extract_quad_mesh import extract_main
 
         sys.argv = ["neuralquad.extract_quad_mesh", *command_args]
