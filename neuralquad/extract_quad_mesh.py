@@ -7,6 +7,15 @@ import re
 import warnings
 from pathlib import Path
 
+from .field_conversion import (
+    convert_crossfield_to_rosy as _field_convert_crossfield_to_rosy,
+    convert_rawfield_to_rosy as _field_convert_rawfield_to_rosy,
+    load_crossfield_vec as _field_load_crossfield_vec,
+    load_rawfield as _field_load_rawfield,
+    load_rosy as _field_load_rosy,
+    write_rosy_from_alpha as _field_write_rosy_from_alpha,
+)
+
 
 def _load_directional():
     try:
@@ -134,7 +143,21 @@ def convert_mesh(mesh, format):
         return output_path
     except Exception as e:
         raise RuntimeError(f"Error converting mesh to {format}: {e}") from e
-    
+
+
+def convert_mesh_to_path(mesh, format, output_path=None):
+    from pathlib import Path
+    from trimesh import load_mesh
+
+    mesh = Path(mesh)
+    loaded_mesh = load_mesh(mesh)
+    output_path = mesh.with_suffix(f".{format}") if output_path is None else Path(output_path)
+
+    try:
+        loaded_mesh.export(output_path, file_type=format)
+        return output_path
+    except Exception as e:
+        raise RuntimeError(f"Error converting mesh to {format}: {e}") from e
 
 def _write_crossfield_vec(path, alpha, beta):
     import numpy as np
@@ -187,114 +210,30 @@ def _write_rawfield(path, rawfield):
 
 
 def _load_rawfield(rawfield_path):
-    import io
-    import numpy as np
-
-    with Path(rawfield_path).open("r", encoding="utf-8") as infile:
-        lines = [line.strip() for line in infile if line.strip()]
-
-    if not lines:
-        raise ValueError(f"Empty raw-field file: {rawfield_path}")
-
-    first_parts = lines[0].split()
-    has_header = len(first_parts) == 2
-    rawfield_lines = lines
-    expected_degree = 4
-    expected_rows = None
-
-    if has_header:
-        try:
-            degree = int(first_parts[0])
-            tangent_spaces = int(first_parts[1])
-        except ValueError:
-            has_header = False
-        else:
-            if degree != expected_degree:
-                raise ValueError(
-                    f"Only 4-RoSy raw-field files are supported, got degree={degree} in {rawfield_path}"
-                )
-            expected_rows = tangent_spaces
-            rawfield_lines = lines[1:]
-
-    if not rawfield_lines:
-        raise ValueError(f"Raw-field file contains no vector rows: {rawfield_path}")
-
-    rawfield = np.loadtxt(io.StringIO("\n".join(rawfield_lines)), dtype=np.float64)
-    if rawfield.ndim == 1:
-        rawfield = rawfield.reshape(1, -1)
-    if rawfield.shape[1] != 12:
+    rawfield = _field_load_rawfield(Path(rawfield_path))
+    if rawfield.ndim != 2 or rawfield.shape[1] != 12:
         raise ValueError(f"Expected exactly 12 columns in raw-field file: {rawfield_path}")
-    if expected_rows is not None and rawfield.shape[0] != expected_rows:
-        raise ValueError(
-            f"Raw-field row count mismatch in {rawfield_path}: header={expected_rows}, rows={rawfield.shape[0]}"
-        )
     return rawfield
 
 
 def _load_crossfield_vec(crossfield_path):
-    import numpy as np
-
-    cross_field = np.loadtxt(crossfield_path, dtype=np.float64)
-    if cross_field.ndim == 1:
-        cross_field = cross_field.reshape(1, -1)
-    if cross_field.shape[1] < 6:
-        raise ValueError(f'Expected at least 6 columns in cross-field file: {crossfield_path}')
-    alpha = cross_field[:, 0:3]
-    beta = cross_field[:, 3:6]
-    return alpha, beta
+    return _field_load_crossfield_vec(Path(crossfield_path))
 
 
 def _load_rosy(rosy_path):
-    import numpy as np
-
-    with Path(rosy_path).open("r", encoding="utf-8") as infile:
-        lines = [line.strip() for line in infile if line.strip()]
-
-    if len(lines) < 2:
-        raise ValueError(f"Invalid .rosy file: {rosy_path}")
-
-    try:
-        count = int(lines[0])
-        symmetry = int(lines[1])
-    except ValueError as exc:
-        raise ValueError(f"Invalid .rosy header in {rosy_path}") from exc
-
-    if symmetry != 4:
-        raise ValueError(f"Only 4-RoSy .rosy files are supported, got N={symmetry} in {rosy_path}")
-
-    vectors = []
-    for line_number, line in enumerate(lines[2:], start=3):
-        parts = line.split()
-        if len(parts) < 3:
-            raise ValueError(f"Line {line_number} in {rosy_path} has fewer than 3 values.")
-        try:
-            vectors.append([float(parts[0]), float(parts[1]), float(parts[2])])
-        except ValueError as exc:
-            raise ValueError(f"Line {line_number} in {rosy_path} contains non-numeric data.") from exc
-
-    primary = np.asarray(vectors, dtype=np.float64)
-    if primary.shape[0] != count:
-        raise ValueError(f".rosy row count mismatch in {rosy_path}: header={count}, rows={primary.shape[0]}")
-    return _safe_normalize(primary)
+    return _field_load_rosy(Path(rosy_path))
 
 
 def _write_rosy_from_alpha(alpha, output_path: Path) -> Path:
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8", newline="\n") as outfile:
-        outfile.write(f"{len(alpha)}\n")
-        outfile.write("4\n")
-        for x, y, z in _safe_normalize(alpha):
-            outfile.write(f"{x} {y} {z}\n")
-    return output_path
+    return _field_write_rosy_from_alpha(alpha, Path(output_path))
 
 
 def _convert_crossfield_to_rosy(input_path: Path, output_path: Path | None = None, alpha=None) -> Path:
-    input_path = Path(input_path)
-    output_path = input_path.with_suffix(".rosy") if output_path is None else Path(output_path)
-    if alpha is None:
-        alpha, _beta = _load_crossfield_vec(input_path)
-    return _write_rosy_from_alpha(alpha, output_path)
+    return _field_convert_crossfield_to_rosy(Path(input_path), output_path, alpha=alpha)
+
+
+def _convert_rawfield_to_rosy(input_path: Path, output_path: Path | None = None) -> Path:
+    return _field_convert_rawfield_to_rosy(Path(input_path), output_path)
 
 
 def _snapshot_iteration_key(path):
@@ -764,8 +703,7 @@ def extract_quad_mesh(
         )
     elif field_suffix in (".rawfield", ".rawfiled"):
         if backend == 'pyquadwild':
-            from neurcross import convert_rawfield_to_rosy
-            rosy_path = convert_rawfield_to_rosy(field_path, output_path.with_suffix('.rosy'))
+            rosy_path = _convert_rawfield_to_rosy(field_path, output_path.with_suffix('.rosy'))
             _extract_quad_mesh_from_rosy(
                 str(mesh_path),
                 str(rosy_path),
@@ -879,13 +817,41 @@ def build_extract_parser() -> argparse.ArgumentParser:
 
 def build_convert_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Convert a mesh to a different format."
+        description="Convert a mesh artifact or field artifact to a different format."
     )
-    parser.add_argument("input_path", type=Path, help="Path to the input mesh.")
+    parser.add_argument("input_path", type=Path, help="Path to the input mesh or field.")
     parser.add_argument(
         "format",
         type=str,
-        help="Supported Output formats: obj, stl, off, ply, collada, json, dict, glb, dict64, msgpack",
+        help=(
+            "Output format. Mesh formats: obj, stl, off, ply, collada, json, dict, glb, dict64, msgpack. "
+            "Field formats: crossfield, rosy, rawfield."
+        ),
+    )
+    parser.add_argument(
+        "output_path",
+        nargs="?",
+        type=Path,
+        help="Optional explicit output path. Defaults to a sibling file with an inferred extension.",
+    )
+    parser.add_argument(
+        "--input-format",
+        choices=("auto", "crossfield", "rosy", "rawfield"),
+        default="auto",
+        help="Field input format. Ignored for mesh conversion.",
+    )
+    parser.add_argument(
+        "--mesh",
+        type=Path,
+        default=None,
+        help="Matching triangle mesh path for field conversions that need face normals.",
+    )
+    parser.add_argument(
+        "--degree",
+        type=int,
+        default=4,
+        choices=(2, 4),
+        help="Rawfield degree to write for crossfield/rosy -> rawfield. Ignored for mesh conversion.",
     )
     return parser
 
@@ -911,5 +877,20 @@ def extract_main() -> None:
 
 def convert_main() -> None:
     args = build_convert_parser().parse_args()
-    output_path = convert_mesh(args.input_path, args.format)
+    from .field_conversion import FIELD_FORMATS, convert_field, infer_input_format, is_field_artifact_path
+
+    if args.format in FIELD_FORMATS or args.input_format != "auto" or is_field_artifact_path(args.input_path):
+        input_format = infer_input_format(args.input_path, args.input_format)
+        output_path = convert_field(
+            args.input_path,
+            args.output_path,
+            input_format=input_format,
+            output_format=args.format,
+            mesh_path=args.mesh,
+            degree=args.degree,
+        )
+        print(f"Converted field {args.input_path} to {output_path}")
+        return
+
+    output_path = convert_mesh_to_path(args.input_path, args.format, output_path=args.output_path)
     print(f"Converted {args.input_path} to {output_path}")

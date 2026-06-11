@@ -10,7 +10,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="python -m neuralquad",
         description=(
             "NeuralQuad extracts cross-field-aligned quad meshes from triangle meshes. "
-            "Use it with NeurCross cross-field output, .rosy files, or Directional .rawfield files."
+            "It also owns field conversion between .vec, .rosy, and .rawfield artifacts."
         ),
     )
     subparsers = parser.add_subparsers(dest="command", metavar="command")
@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     convert = subparsers.add_parser(
         "convert",
-        help="Convert a mesh to a different format.",
+        help="Convert a mesh artifact or field artifact.",
     )
     extract.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
     convert.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
@@ -30,12 +30,13 @@ def build_parser() -> argparse.ArgumentParser:
         "High-level functionality:\n"
         "  extract-quad-mesh  Generate a quad mesh from .vec, .rosy, or .rawfield input.\n\n"
         "  extract  Alias for extract-quad-mesh.\n\n"
-        "  convert  Convert a mesh to a different format.\n\n"
+        "  convert  Convert a mesh artifact or field artifact.\n\n"
         "Examples:\n"
         "  `python -m neuralquad --help`\n"
         "  `python -m neuralquad extract-quad-mesh --help`\n"
         "  `python -m neuralquad extract-quad-mesh mesh.ply field.rosy output.obj`\n"
-        "  `python -m neuralquad convert input.obj stl`"
+        "  `python -m neuralquad convert input.obj stl`\n"
+        "  `python -m neuralquad convert field.vec rawfield`"
     )
     return parser
 
