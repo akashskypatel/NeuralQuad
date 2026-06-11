@@ -136,7 +136,7 @@ def convert_mesh(mesh, format):
         raise RuntimeError(f"Error converting mesh to {format}: {e}") from e
     
 
-def _write_crossfield_txt(path, alpha, beta):
+def _write_crossfield_vec(path, alpha, beta):
     import numpy as np
 
     cross_field = np.concatenate((alpha, beta), axis=-1)
@@ -231,7 +231,7 @@ def _load_rawfield(rawfield_path):
     return rawfield
 
 
-def _load_crossfield_txt(crossfield_path):
+def _load_crossfield_vec(crossfield_path):
     import numpy as np
 
     cross_field = np.loadtxt(crossfield_path, dtype=np.float64)
@@ -293,12 +293,12 @@ def _convert_crossfield_to_rosy(input_path: Path, output_path: Path | None = Non
     input_path = Path(input_path)
     output_path = input_path.with_suffix(".rosy") if output_path is None else Path(output_path)
     if alpha is None:
-        alpha, _beta = _load_crossfield_txt(input_path)
+        alpha, _beta = _load_crossfield_vec(input_path)
     return _write_rosy_from_alpha(alpha, output_path)
 
 
 def _snapshot_iteration_key(path):
-    match = re.search(r'_iter_(\d+)\.txt$', os.path.basename(path))
+    match = re.search(r'_iter_(\d+)\.(?:vec|txt)$', os.path.basename(path))
     return int(match.group(1)) if match else -1
 
 
@@ -306,7 +306,7 @@ def load_latest_crossfield_snapshot(crossfield_paths):
     if not crossfield_paths:
         raise ValueError('No cross-field snapshots were provided.')
     latest_path = max((str(path) for path in crossfield_paths), key=_snapshot_iteration_key)
-    alpha, beta = _load_crossfield_txt(latest_path)
+    alpha, beta = _load_crossfield_vec(latest_path)
     return _safe_normalize(alpha), _safe_normalize(beta), latest_path
 
 
@@ -663,7 +663,7 @@ def extract_quad_mesh_from_field(
     output_dir = os.path.dirname(os.path.abspath(output_path))
     os.makedirs(output_dir, exist_ok=True)
     output_base = os.path.splitext(os.path.abspath(output_path))[0]
-    crossfield_path = _write_crossfield_txt(output_base + '_crossfield.txt', alpha, beta)
+    crossfield_path = _write_crossfield_vec(output_base + '_crossfield.vec', alpha, beta)
     rosy_path = _convert_crossfield_to_rosy(Path(crossfield_path), Path(output_base + '.rosy'), alpha=alpha)
     rawfield_path = _write_rawfield(
         Path(output_base + '.rawfield'),
@@ -748,8 +748,8 @@ def extract_quad_mesh(
             )
         else:
             raise ValueError(f"Unsupported backend {backend!r}.")
-    elif field_suffix == ".txt":
-        alpha, beta = _load_crossfield_txt(field_path)
+    elif field_suffix in (".vec", ".txt"):
+        alpha, beta = _load_crossfield_vec(field_path)
         extract_quad_mesh_from_field(
             str(mesh_path),
             alpha,
@@ -786,7 +786,7 @@ def extract_quad_mesh(
         )
     else:
         raise ValueError(
-            f"Field file extension {field_path.suffix!r} is not supported. Provide a .rosy, .txt, or .rawfield file."
+            f"Field file extension {field_path.suffix!r} is not supported. Provide a .rosy, .vec, .txt, or .rawfield file."
         )
     return output_path
 
@@ -822,13 +822,13 @@ def extract_quad_mesh_from_saved_crossfields(
 
 def build_extract_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Extract a quad mesh from an input triangle mesh using a .rosy, cross-field (.txt), or raw-field (.rawfield) file."
+        description="Extract a quad mesh from an input triangle mesh using a .rosy, cross-field (.vec), or raw-field (.rawfield) file."
     )
     parser.add_argument("mesh_path", type=Path, help="Path to the input triangle mesh.")
     parser.add_argument(
         "field_path",
         type=Path,
-        help="Path to the orientation field. Use .rosy, .txt cross-field, or Directional .rawfield input.",
+        help="Path to the orientation field. Use .rosy, .vec cross-field, legacy .txt cross-field, or Directional .rawfield input.",
     )
     parser.add_argument(
         "output_path",
@@ -845,7 +845,7 @@ def build_extract_parser() -> argparse.ArgumentParser:
         "--backend",
         choices=("auto", "pyquadwild", "directional"),
         default="auto",
-        help="Quad extraction backend to use. auto selects pyquadwild for .rosy/.txt and directional for .rawfield.",
+        help="Quad extraction backend to use. auto selects pyquadwild for .rosy/.vec/.txt and directional for .rawfield.",
     )
     parser.add_argument(
         "--target-quad-count",

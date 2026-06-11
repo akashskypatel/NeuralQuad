@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.epilog = (
         "High-level functionality:\n"
-        "  extract-quad-mesh  Generate a quad mesh from .txt, .rosy, or .rawfield input.\n\n"
+        "  extract-quad-mesh  Generate a quad mesh from .vec, .rosy, or .rawfield input.\n\n"
         "  extract  Alias for extract-quad-mesh.\n\n"
         "  convert  Convert a mesh to a different format.\n\n"
         "Examples:\n"

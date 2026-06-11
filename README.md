@@ -90,7 +90,7 @@ NeurCross writes saved cross-field snapshots under a `save_crossField` directory
 If you want a standalone `.rosy` file from a saved NeurCross cross-field snapshot:
 
 ```powershell
-neurcross-crossfield-to-rosy D:\path\to\save_crossField\mesh_iter_999.txt
+neurcross-crossfield-to-rosy D:\path\to\save_crossField\mesh_iter_999.vec
 ```
 
 ### Extract a Quad Mesh From a `.rosy` File
@@ -113,16 +113,16 @@ python -m neuralquad.extract_quad_mesh D:\path\to\mesh.ply D:\path\to\field.rosy
 
 ### Extract a Quad Mesh From a NeurCross Cross-Field File
 
-NeuralQuad can take a saved NeurCross cross-field `.txt` directly:
+NeuralQuad can take a saved NeurCross cross-field `.vec` directly:
 
 ```powershell
-neuralquad-extract-quad-mesh D:\path\to\mesh.ply D:\path\to\save_crossField\mesh_iter_999.txt
+neuralquad-extract-quad-mesh D:\path\to\mesh.ply D:\path\to\save_crossField\mesh_iter_999.vec
 ```
 
-Directional can also consume the NeurCross `.txt` directly:
+Directional can also consume the NeurCross `.vec` directly:
 
 ```powershell
-neuralquad-extract-quad-mesh --backend directional D:\path\to\mesh.ply D:\path\to\save_crossField\mesh_iter_999.txt
+neuralquad-extract-quad-mesh --backend directional D:\path\to\mesh.ply D:\path\to\save_crossField\mesh_iter_999.vec
 ```
 
 ### Extract a Quad Mesh From a Directional Raw Field
@@ -135,10 +135,10 @@ neuralquad-extract-quad-mesh D:\path\to\mesh.ply D:\path\to\field.rawfield
 neuralquad-extract-quad-mesh --backend directional D:\path\to\mesh.ply D:\path\to\field.rawfield
 ```
 
-When given a NeurCross `.txt` file, NeuralQuad will:
+When given a NeurCross `.vec` file, NeuralQuad will:
 
 1. Read the saved cross field.
-2. Write a sidecar `*_crossfield.txt`.
+2. Write a sidecar `*_crossfield.vec`.
 3. Write a Directional-compatible `*.rawfield` debug file.
 4. Convert that to `*.rosy`.
 5. Run the selected backend.
@@ -155,7 +155,7 @@ neuralquad-extract-quad-mesh D:\path\to\mesh.ply D:\path\to\field.rosy D:\path\t
 If you pass a directory instead of a filename, NeuralQuad creates a default OBJ name inside that directory:
 
 ```powershell
-neuralquad-extract-quad-mesh D:\path\to\mesh.ply D:\path\to\mesh_iter_999.txt D:\output_dir
+neuralquad-extract-quad-mesh D:\path\to\mesh.ply D:\path\to\mesh_iter_999.vec D:\output_dir
 ```
 
 This resolves to:
@@ -172,7 +172,7 @@ Depending on the input field type, extraction may produce:
 
 - final quad mesh OBJ
 - generated `*.rosy` file
-- generated `*_crossfield.txt` file
+- generated `*_crossfield.vec` file
 - generated `*.rawfield` file containing 12-column Directional raw field data for debugging
 - `pyquadwild_debug/` debug directory
 
@@ -188,13 +188,13 @@ The root Python package exposes:
 
 - a triangulated input mesh
 - a `.rosy` field file
-- a NeurCross cross-field `.txt` file
+- a NeurCross cross-field `.vec` file
 - optional `--verbose` flag for detailed logging
 
 ```python
 python -m neuralquad.extract_quad_mesh mesh.ply field.rosy output.obj
 # or if using a NeurCross cross-field file:
-python -m neuralquad.extract_quad_mesh mesh.ply crossfield.txt output.obj
+python -m neuralquad.extract_quad_mesh mesh.ply crossfield.vec output.obj
 ```
 
 ## Acknowledgments
