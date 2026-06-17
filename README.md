@@ -7,7 +7,7 @@ At a high level, the pipeline is:
 1. Start from a triangle mesh.
 2. Train a cross field with the bundled `NeurCross` source.
 3. Optionally convert the saved cross-field output to `.rosy`.
-4. Extract an aligned quad mesh with `pyquadwild`.
+4. Extract an aligned quad mesh with `pyquadwild` or `directional`.
 
 The repository is split by responsibility:
 
@@ -33,15 +33,23 @@ The root `NeuralQuad` package declares these runtime dependencies:
 - `scipy`
 - `timm`
 - `trimesh`
-- `pyquadwild @ git+https://github.com/akashskypatel/pyquadwild.git`
 
-The optional `directional` backend is not declared as a root pip dependency. Install it separately from the local checkout if you want to use `--backend directional`:
+### Extraction Backends
+
+- `pyquadwild @ git+https://github.com/akashskypatel/pyquadwild.git`
+- `directional @ git+https://github.com/akashskypatel/directional.git`
+
+#### Backend Installation
 
 ```powershell
 python -m pip install .\third_party\Directional
 ```
 
-## Installation
+```powershell
+python -m pip install .\third_party\pyquadwild
+```
+
+## Root Package Installation
 
 Install the root package from this repository:
 
@@ -74,6 +82,14 @@ python -m pip install .\third_party\NeurCross
 1. Train NeurCross on a triangle mesh to generate cross-field snapshots.
 2. Use the latest saved cross-field snapshot or a `.rosy` file as extraction input.
 3. Run NeuralQuad extraction to generate the final quad OBJ.
+
+```mermaid
+flowchart LR
+    A[Train NeurCross] --> B[Generate cross-field snapshots]
+    B --> C[Use latest snapshot or .rosy file]
+    C --> D[Run NeuralQuad extraction]
+    D --> E[Generate final quad OBJ]
+```
 
 ### Train a Cross Field
 
