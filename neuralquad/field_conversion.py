@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 FIELD_FORMATS = {"crossfield", "rosy", "rawfield"}
-FIELD_SUFFIXES = {".vec", ".txt", ".rosy", ".rawfield", ".rawfiled"}
+FIELD_SUFFIXES = {".vec", ".txt", ".rosy", ".rawfield"}
 
 
 def infer_rosy_output_path(input_path: Path) -> Path:
@@ -35,7 +35,7 @@ def infer_input_format(input_path: Path, requested: str) -> str:
     if requested != "auto":
         return requested
     suffix = input_path.suffix.lower()
-    if suffix in (".rawfield", ".rawfiled"):
+    if suffix == ".rawfield":
         return "rawfield"
     if suffix == ".rosy":
         return "rosy"
