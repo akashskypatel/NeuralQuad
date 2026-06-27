@@ -1,3 +1,5 @@
+<img src="./assets/banner.png" alt="NeuralQuad Banner" width="100%">
+
 # NeuralQuad
 
 NeuralQuad provides a practical quad-remeshing/re-topology workflow to generate cross field aligned quad mesh using NeurCross trained cross field data.
