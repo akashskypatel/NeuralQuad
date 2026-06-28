@@ -4,14 +4,14 @@
 
 NeuralQuad provides a practical quad-remeshing/re-topology workflow to generate cross field aligned quad mesh using NeurCross trained cross field data.
 
-At a high level, the pipeline is:
+## At a high level, the pipeline is:
 
 1. Start from a triangle mesh.
 2. Train a cross field with the bundled `NeurCross` source.
 3. Optionally convert the saved cross-field output to `.rosy`.
 4. Extract an aligned quad mesh with `pyquadwild` or `directional`.
 
-The repository is split by responsibility:
+## Repository Structure
 
 - `neuralquad/`: quad mesh extraction package and CLI.
 - `third_party/NeurCross/`: cross-field training and cross-field to `.rosy` conversion.
